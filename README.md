@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mangan — Project Management SaaS (MVP)
 
-## Getting Started
+A small, self-hostable project-management app: organizations/workspaces, team members with
+roles, projects, tasks, a drag-and-drop Kanban board, a dashboard, and notifications.
 
-First, run the development server:
+Built with **Next.js 16 (App Router) · TypeScript · Prisma · PostgreSQL · Auth.js v5 · Tailwind · @dnd-kit**.
+
+## MVP flow
+
+Login → Organization → Team (invite / roles) → Project → Tasks → Kanban board → Dashboard → Notifications
+
+Deferred to later phases: subscriptions/payments, real-time WebSockets, Gantt/calendar/time-tracking,
+AI features, third-party integrations, audit logs.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env          # then set AUTH_SECRET (npx auth secret) for real use
+docker compose up -d          # Postgres on :55444, Mailpit on :8025 (SMTP :1025)
+npm install
+npm run db:migrate            # apply migrations
+npm run db:seed               # demo org "acme" + users (password: password123)
+npm run dev                   # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> The Postgres host port is **55444** (5432/5433 were already taken on this machine).
+> Change it in `docker-compose.yml` and `DATABASE_URL` if you prefer.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Seed accounts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Email | Role | Password |
+| --- | --- | --- |
+| owner@mangan.local | OWNER | password123 |
+| alice@mangan.local | PROJECT_MANAGER | password123 |
+| bob@mangan.local | MEMBER | password123 |
 
-## Learn More
+Emails (verification, password reset, invites) are caught by **Mailpit** at http://localhost:8025.
 
-To learn more about Next.js, take a look at the following resources:
+### OAuth (optional)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Set `AUTH_GOOGLE_ID/SECRET` and/or `AUTH_GITHUB_ID/SECRET` in `.env`; the buttons appear on the
+login page automatically. Callback URL: `http://localhost:3000/api/auth/callback/{google|github}`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` / `build` / `start` | Next.js |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run test` | Vitest unit tests (ordering, role checks) |
+| `npm run db:migrate` / `db:push` / `db:seed` / `db:studio` | Prisma |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Architecture
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **`src/app/(auth)/`** — register, login, verify-email, forgot/reset-password
+- **`src/app/(app)/[slug]/`** — org-scoped area: `dashboard`, `projects`, `projects/[id]/board`,
+  `projects/[id]/tasks/[taskId]`, `projects/[id]/settings`, `settings/members`, `notifications`
+- **`src/lib/`** — `auth.ts` / `auth.config.ts` (Auth.js, split for edge proxy), `authz.ts`
+  (`requireUser` / `requireOrg` / `requireOrgRole` / `requireProjectAccess`), `roles.ts`,
+  `ordering.ts` (fractional Kanban ordering), `activity.ts` (activity + notification fan-out),
+  `mail.ts`, `db.ts`
+- **`src/server/`** — server actions grouped by domain (organizations, members, projects, tasks,
+  comments, notifications, auth-actions). Every mutating action re-resolves the caller's role first.
+- **`src/proxy.ts`** — Next 16 proxy (formerly middleware); redirects unauthenticated users to `/login`.
+
+### Roles
+
+`OWNER > ADMIN > PROJECT_MANAGER > MEMBER`. Org role gates member management and project creation;
+project membership gates task access (managers/admins bypass).
+
+## Notes / next steps
+
+- Real-time board updates (Socket.IO) — currently optimistic UI + `router.refresh()`.
+- Attachments model exists but upload UI is not wired (local disk → S3 later).
+- Rate limiting on auth routes, audit log view, subscription/billing module.
