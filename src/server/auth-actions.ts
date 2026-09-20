@@ -68,7 +68,7 @@ export async function loginWithCredentials(_prev: ActionState, formData: FormDat
     });
   } catch (err) {
     if (err instanceof AuthError) {
-      if (err.cause?.err?.message === "EMAIL_NOT_VERIFIED")
+      if ((err as { code?: string }).code === "EMAIL_NOT_VERIFIED")
         return { error: "Verify your email before signing in." };
       return { error: "Invalid email or password." };
     }
